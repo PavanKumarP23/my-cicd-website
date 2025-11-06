@@ -1,0 +1,54 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install --save-dev html-validate
+
+      - name: Validate HTML
+        run: npx html-validate index.html
+
+      - name: Check for basic link-like attributes
+        run: |
+          grep -E 'href="|src="' index.html || true
+
+      - name: Run security checks
+        run: |
+          if grep -R --exclude-dir=".git" -n -E 'api_key|password|secret|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY' .; then
+            echo "Hardcoded secret-like string found. Aborting."
+            exit 1
+          else
+            echo "No hardcoded secrets found."
+          fi
+
+      - name: Build site
+        run: |
+          echo "window.BUILD_TIME='$(date --utc)';" > build-info.js
+          cat script.js >> build-info.js
+          mv build-info.js script.js
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          # cname: optional.custom.domain
